@@ -1,18 +1,14 @@
 from cpo_pre import Agent
 from com_carla_env import CarlaEnv
-from decimal import Decimal
-from collections import deque
-from copy import deepcopy
-import pandas as pd
 import numpy as np
 import argparse
 import pickle
 import random
 import torch
 import wandb
-import copy
-import time
-import gym
+
+
+wandb.init(project="v2x_cr_cpo")
 
 
 def train(main_args):
@@ -99,6 +95,23 @@ def train(main_args):
                     step_.append(step)
                     d_acceleration_.append(d_acceleration)
                     break
+            v_loss, cost_v_loss, objective, cost_surrogate, kl, entropy, grad_g, grad_b, optimization_case = agent.train(
+                trajs=trajectories)
+            reward_ = env.reward_
+            lost_data_all = env.lost_data_all
+            wandb.log({
+                "v_loss": v_loss,
+                "cost_v_loss": cost_v_loss,
+                "objective": objective,
+                "cost_surrogate": cost_surrogate,
+                "kl": kl,
+                "entropy": entropy,
+                "grad_g": grad_g,
+                "grad_b": grad_b,
+                "optimization_case": optimization_case,
+                "reward": reward_[-1] if reward_ else None,  # 记录最新的reward值
+                "lost_data_all": lost_data_all[-1] if lost_data_all else None  # 记录最新的lost_data_all值
+            })
 
 
 def test(args):
