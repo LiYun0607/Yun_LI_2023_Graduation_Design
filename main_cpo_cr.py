@@ -7,9 +7,19 @@ import random
 import torch
 import wandb
 
-
-wandb.init(project="v2x_cr_cpo")
-
+wandb.init(project="cr_cpo")
+wandb.define_metric("epoch")
+wandb.define_metric("v_loss", step_metric="epoch")
+wandb.define_metric("cost_v_loss", step_metric="epoch")
+wandb.define_metric("objective", step_metric="epoch")
+wandb.define_metric("cost_surrogate", step_metric="epoch")
+wandb.define_metric("kl", step_metric="epoch")
+wandb.define_metric("entropy", step_metric="epoch")
+wandb.define_metric("grad_g", step_metric="epoch")
+wandb.define_metric("grad_b", step_metric="epoch")
+wandb.define_metric("optimization_case", step_metric="epoch")
+wandb.define_metric("reward", step_metric="epoch")
+wandb.define_metric("lost_data_all", step_metric="epoch")
 
 def train(main_args):
     algo_idx = 1
@@ -23,22 +33,22 @@ def train(main_args):
     save_name = '_'.join(env_name.split('-')[:-1])
     save_name = "result/{}_{}".format(save_name, algo)
     args = {
-        'agent_name':agent_name,
+        'agent_name': agent_name,
         'save_name': save_name,
-        'discount_factor':0.99,
-        'hidden1':128,
-        'hidden2':128,
-        'v_lr':3e-4,
-        'cost_v_lr':3e-4,
-        'value_epochs':1500,
-        'batch_size':2048,
-        'num_conjugate':10,
-        'max_decay_num':10,
-        'line_decay':0.8,
-        'max_kl':0.001,
-        'damping_coeff':0.01,
-        'gae_coeff':0.97,
-        'cost_d':0.01,
+        'discount_factor': 0.99,
+        'hidden1': 128,
+        'hidden2': 128,
+        'v_lr': 3e-4,
+        'cost_v_lr': 3e-4,
+        'value_epochs': 1500,
+        'batch_size': 2048,
+        'num_conjugate': 10,
+        'max_decay_num': 10,
+        'line_decay': 0.8,
+        'max_kl': 0.001,
+        'damping_coeff': 0.01,
+        'gae_coeff': 0.97,
+        'cost_d': 20,
     }
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
@@ -90,7 +100,7 @@ def train(main_args):
                 score += reward
                 score = round(score, 3)
 
-                if done or step >= max_ep_len:
+                if done:
                     episode_length += 1
                     step_.append(step)
                     d_acceleration_.append(d_acceleration)
@@ -99,7 +109,9 @@ def train(main_args):
                 trajs=trajectories)
             reward_ = env.reward_
             lost_data_all = env.lost_data_all
+            print(f"reward: {reward_[-1] if reward_ else None}, cost_surrogate: {cost_surrogate}")
             wandb.log({
+                "epoch": epoch,
                 "v_loss": v_loss,
                 "cost_v_loss": cost_v_loss,
                 "objective": objective,
@@ -116,6 +128,7 @@ def train(main_args):
 
 def test(args):
     pass
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='CPO')
