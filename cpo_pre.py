@@ -252,7 +252,7 @@ class Agent:
                 optim_case = 1
             else:
                 optim_case = 0
-        print("optimizing case :", optim_case)
+        print("optimizing case :", optim_case, "c_value :", c_value, "B_value :", B_value)
         if optim_case in [3,4]:
             lam = torch.sqrt(scalar_q/(2*self.max_kl))
             nu = 0
