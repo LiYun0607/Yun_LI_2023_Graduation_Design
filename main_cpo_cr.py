@@ -38,8 +38,8 @@ def train(main_args):
         'discount_factor': 0.99,
         'hidden1': 128,
         'hidden2': 128,
-        'v_lr': 3e-4,
-        'cost_v_lr': 3e-4,
+        'v_lr': 5e-3,
+        'cost_v_lr': 5e-3,
         'value_epochs': 1500,
         'batch_size': 2048,
         'num_conjugate': 10,
@@ -48,7 +48,7 @@ def train(main_args):
         'max_kl': 0.001,
         'damping_coeff': 0.01,
         'gae_coeff': 0.97,
-        'cost_d': 20,
+        'cost_d': 0.01,
     }
     if torch.cuda.is_available():
         device = torch.device('cuda:0')
