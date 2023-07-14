@@ -50,7 +50,7 @@ class Policy(nn.Module):
         # std = torch.exp(log_std)
         # log_std = nn.Parameter(torch.ones(self.action_dim)*log_std_init)
         total_steps = running_time*3600/step_time
-        log_std_init = math.exp(-1.5e-6*self.count)
+        log_std_init = 1
         std = nn.Parameter(torch.ones(self.action_dim)*log_std_init)
         # std = torch.exp(log_std)
         # if epoch > 300:
