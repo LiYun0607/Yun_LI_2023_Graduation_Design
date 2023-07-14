@@ -32,7 +32,6 @@ import wandb
 from agents.navigation.basic_agent import BasicAgent
 
 
-wandb.init(project="cr-cpo")
 argparser = argparse.ArgumentParser(description="args for carla environment")
 argparser.add_argument(
     '--host',
@@ -233,6 +232,7 @@ class CarlaEnv(gym.Env):
         self.client.set_timeout(300.0)
         self.world = self.client.load_world(TOWN)
         settings = self.world.get_settings()
+        settings.no_rendering_mode = True
         if not settings.synchronous_mode:
             synchronous_master = True
             settings.synchronous_mode = True
@@ -291,7 +291,7 @@ class CarlaEnv(gym.Env):
             high_observation.append(self.loc_max)
         for i in range(self.n_vehicles):
             low_action.append(0)
-            high_action.append(4)
+            high_action.append(3.9999)
 
         self.observation_space = spaces.Box(
             low=np.array(low_observation, dtype=np.float32),
@@ -542,8 +542,7 @@ class CarlaEnv(gym.Env):
             self.location_all[i][1] = self.ys[i]
 
     def step(self, action):
-        action = action / 4.0 * 3.0  # 确保动作值在 0 到 3 之间
-        discrete_action = np.floor(action).astype(int)
+        action = np.floor(action).astype(int)
         self.world.tick()
         info = {}
         info['cost'] = 0
@@ -573,7 +572,6 @@ class CarlaEnv(gym.Env):
             state.append(self.location_all[i][1])
             for j in range(self.data_generator.data_cons_max):
                 state.append(self.cache_queue[i][j])
-        print(f"time step: {self.time_step}, reward: {reward}, cost: {info['cost']}")
         if self.time_step >= args.number_of_episodes:
             self.n_itr += 1
             self.n_itr_.append(self.n_itr)
@@ -588,12 +586,6 @@ class CarlaEnv(gym.Env):
             })
             log_dir_ = os.path.join(log_dir, 'lost_data_cpo.csv')
             log_data.to_csv(log_dir_)
-            for i in range(len(self.lost_data_all)):
-                wandb.log({
-                    "lost data all": self.lost_data_all[i],
-                    "number of iteration": self.n_itr_[i],
-                    "reward": self.reward_[i],
-                })
 
             print("write file data successfully!")
 
@@ -603,4 +595,5 @@ class CarlaEnv(gym.Env):
         # print(f"data lost: {data_loss_total}, reward: {reward}")
 
         return np.array(state, dtype=np.float32), reward, done, info
+
 
