@@ -28,6 +28,7 @@ import time
 import math
 import torch
 from carla import Transform, Location, Rotation
+import wandb
 from agents.navigation.basic_agent import BasicAgent
 
 
@@ -62,12 +63,12 @@ argparser.add_argument(
 argparser.add_argument(
     '-s', '--number-of-episodes',
     metavar='S',
-    default=512,
+    default=2048,
     type=int,
     help='Number of steps per epoch')
 
 args = argparser.parse_args()
-
+wandb.init(project="carla_Transformer")
 TOWN = 'Town02'
 tau = 0.1
 n_lic_channels = 4
@@ -153,9 +154,6 @@ class DataRate():
             "dist": [],
             "id": [],
         }
-        interference_dist = []
-        possible_vehicles = []
-        possible_vehicles_num = []
         for k in range(args.number_of_vehicles):
             # find vehicles set within the V2V communication range and
             # don't take any actions
@@ -227,13 +225,13 @@ class CacheQueue:
 
 
 class CarlaEnv(gym.Env):
-
-    def __init__(self):
+    def __init__(self, host="localhost", port=2000):
         super(CarlaEnv, self).__init__()
-        self.client = carla.Client(args.host, args.port)
+        self.client = carla.Client(host, port)
         self.client.set_timeout(300.0)
         self.world = self.client.load_world(TOWN)
         settings = self.world.get_settings()
+        settings.no_rendering_mode = True
         if not settings.synchronous_mode:
             synchronous_master = True
             settings.synchronous_mode = True
@@ -259,12 +257,13 @@ class CarlaEnv(gym.Env):
         self.loc_min = -1000
         self.loc_max = 1000
         self.n_actions = 4
-        self.agent_types = "MADDPG"
 
         self.data_generator = GenerateData()
         self.cache_generator = CacheQueue()
         low_observation = []
         high_observation = []
+        low_action = []
+        high_action = []
         action_space = []
         self.untransmiteed_data = []
         self.lost_data_all = []
@@ -289,21 +288,13 @@ class CarlaEnv(gym.Env):
         for i in range(self.n_vehicles * 2):
             low_observation.append(self.loc_min)
             high_observation.append(self.loc_max)
-        # append action
         for i in range(self.n_vehicles):
-            action_space.append(self.n_actions)
+            action_space.append(4)
+
         self.observation_space = spaces.Box(
             low=np.array(low_observation, dtype=np.float32),
             high=np.array(high_observation, dtype=np.float32))
-        low_action = []
-        high_action = []
-        for i in range(self.n_vehicles):
-            low_action.append(0)
-            high_action.append(4)
-        self.action_space = spaces.Box(
-            low=np.array(low_action, dtype=np.float32),
-            high=np.array(high_action, dtype=np.float32))
-        # self.action_space = spaces.Discrete(self.n_actions)
+        self.action_space = spaces.MultiDiscrete(action_space)
         self.state = None
         self.xs = np.zeros(self.n_vehicles)
         self.ys = np.zeros(self.n_vehicles)
@@ -373,7 +364,6 @@ class CarlaEnv(gym.Env):
         blueprints = [x for x in blueprints if not x.id.endswith('ambulance')]
         self.blueprints = sorted(blueprints, key=lambda bp: bp.id)
         self.spawn_points = self.world.get_map().get_spawn_points()
-        print(f"spawn points: {self.spawn_points[0].location}")
         SpawnActor = carla.command.SpawnActor
         SetAutopilot = carla.command.SetAutopilot
         FutureActor = carla.command.FutureActor
@@ -409,17 +399,14 @@ class CarlaEnv(gym.Env):
         self.location_all = np.zeros([self.n_vehicles, 2])
         self.get_location()
         self.state = []
-        print(self.batch)
         for i in range(self.n_vehicles):
             self.state.append(self.location_all[i][0])
             self.state.append(self.location_all[i][1])
             for j in range(self.data_generator.data_cons_max):
                 self.state.append(self.cache_queue[i][j])
-        print(f"states in reset(): {self.state}")
         return np.array(self.state, dtype=np.float32)
 
     def state_transition(self, cache_queues, actions, data):
-        action = []
         data_loss_total = 0
         cost_total = 0
         new_queues = np.array(list(cache_queues))
@@ -552,6 +539,8 @@ class CarlaEnv(gym.Env):
 
     def step(self, action):
         self.world.tick()
+        info = {}
+        info['cost'] = 0
         self.time_step += 1
         xs = np.zeros(self.n_vehicles)
         ys = np.zeros(self.n_vehicles)
@@ -570,6 +559,7 @@ class CarlaEnv(gym.Env):
         self.get_location()
         self.detect_collision()
         self.cache_queue, reward, data_loss_total = self.state_transition(self.cache_queue, action, self.data_all)
+        info['cost'] = data_loss_total
         self.reward.append(reward)
         self.untransmiteed_data.append(data_loss_total)
         for i in range(self.n_vehicles):
@@ -577,7 +567,7 @@ class CarlaEnv(gym.Env):
             state.append(self.location_all[i][1])
             for j in range(self.data_generator.data_cons_max):
                 state.append(self.cache_queue[i][j])
-        if self.time_step > args.number_of_episodes:
+        if self.time_step >= args.number_of_episodes:
             self.n_itr += 1
             self.n_itr_.append(self.n_itr)
             done = True
@@ -589,9 +579,18 @@ class CarlaEnv(gym.Env):
                 "number of iteration": self.n_itr_,
                 "reward": self.reward_,
             })
-            log_dir_ = os.path.join(log_dir, 'lost_data.csv')
+            data = {
+                "lost_data_all": self.lost_data_all[-1],
+                "reward": self.reward_[-1],
+            }
+
+            # 使用wandb.log记录数据
+            wandb.log(data)
+            log_dir_ = os.path.join(log_dir, 'lost_data_cpo.csv')
             log_data.to_csv(log_dir_)
+
             print("write file data successfully!")
+            print(data)
 
         # print(f"state: {state}")
         # print(f"cache queue: {self.cache_queue}")
