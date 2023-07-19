@@ -52,15 +52,15 @@ class CustomTransformer(BaseFeaturesExtractor):
         transformer_output = self.transformer_encoder(observations)
         return self.linear(transformer_output.view(transformer_output.shape[0], -1))
 
-def make_env(port):
+def make_env(port, env_id):
     def _init():
-        return CarlaEnv(port=port)
+        return CarlaEnv(port=port, env_id=env_id)
     return _init
 
 
 if __name__ == '__main__':
     ports = [2000, 2004]
-    envs = SubprocVecEnv([make_env(port) for port in ports])
+    envs = SubprocVecEnv([make_env(port, i) for i, port in enumerate(ports)])
     total_rewards = np.zeros(2)  # 用于保存每个环境的总奖励
     total_lost_data = np.zeros(2)  # 用于保存每个环境的总丢失数据
     # Define policy with custom feature extractor
@@ -75,7 +75,7 @@ if __name__ == '__main__':
     # model.learn(total_timesteps=3072000)
     callback = CustomCallback()
     model = PPO("MlpPolicy", envs, verbose=1, policy_kwargs=policy_kwargs, n_steps=1024,
-                learning_rate=learning_rate_schedule)
+                learning_rate=learning_rate_schedule, tensorboard_log="./ppo_transformer/")
     model.learn(total_timesteps=3072000, callback=callback)
 
     # Now you can access the recorded rewards and lost data
