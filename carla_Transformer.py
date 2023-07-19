@@ -1,5 +1,5 @@
 import torch.nn as nn
-from com_carla_env import CarlaEnv
+from com_carla_env2 import CarlaEnv
 from stable_baselines3 import PPO
 from stable_baselines3.common.torch_layers import BaseFeaturesExtractor
 
@@ -24,13 +24,18 @@ class CustomTransformer(BaseFeaturesExtractor):
 # Create environment
 env = CarlaEnv()
 
+
+def learning_rate_schedule(progress_remaining):
+    return 0.0003 * progress_remaining
+
 # Define policy with custom feature extractor
 policy_kwargs = dict(
     features_extractor_class=CustomTransformer,
     features_extractor_kwargs=dict(features_dim=64),
+    # optimizer_kwargs=dict(weight_decay=0.00001),
 )
 reward_ = env.reward_
 lost_data_all = env.lost_data_all
 # Train agent
-model = PPO("MlpPolicy", env, verbose=1, policy_kwargs=policy_kwargs)
+model = PPO("MlpPolicy", env, verbose=1, policy_kwargs=policy_kwargs, learning_rate=learning_rate_schedule)
 model.learn(total_timesteps=3072000)
