@@ -227,17 +227,20 @@ class CacheQueue:
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id, host="localhost", port=2000):
+    def __init__(self, env_id, tm_port, host="localhost", port=2000):
         super(CarlaEnv, self).__init__()
+        self.env_id = env_id
         self.client = carla.Client(host, port)
         self.client.set_timeout(300.0)
+        self.tm_port = tm_port
         self.world = self.client.load_world(TOWN)
-        self.throughtput = 0
+        self.throughput = 0
         self.PER_history = []
         self.throughput_history = []
         self.spectral_efficiency_history = []
         self.energy_efficiency_history = []
         self.fairness_index_history = []
+        self.transmitted_data_all = []
 
         self.csv_file = f"data_{env_id}.csv"
         settings = self.world.get_settings()
@@ -340,7 +343,7 @@ class CarlaEnv(gym.Env):
 
     def spawn_random_traffic(self):
         self.batch = []
-        traffic_manager = self.client.get_trafficmanager(8000)
+        traffic_manager = self.client.get_trafficmanager(self.tm_port)
         traffic_manager.set_synchronous_mode(True)
         traffic_manager.set_global_distance_to_leading_vehicle(3)
         traffic_manager.global_percentage_speed_difference(30.0)
@@ -548,20 +551,13 @@ class CarlaEnv(gym.Env):
             self.location_all[i][1] = self.ys[i]
 
     def calculate_fairness_index(self):
-        fairness_index_history = []
-
-        for throughput_per_step in self.throughput_history:
-            sum_throughput = sum(throughput_per_step)
-            sum_throughput_squared = sum(x ** 2 for x in throughput_per_step)
-
-            if sum_throughput_squared > 0:
-                fairness_index = (sum_throughput ** 2) / (self.n_agents * sum_throughput_squared)
-            else:
-                fairness_index = 1  # If no throughput, fairness is considered to be maximum i.e., 1
-
-            fairness_index_history.append(fairness_index)
-
-        return fairness_index_history
+        # Calculate the throughput for each time step
+        throughput_per_step = [data_transmitted / 0.1 for data_transmitted in
+                               self.transmitted_data_all]  # replace 0.1 with your actual time step length if different
+        # Calculate the fairness index
+        fairness_index = (sum(throughput_per_step) ** 2) / (
+                    len(throughput_per_step) * sum(throughput ** 2 for throughput in throughput_per_step))
+        return fairness_index
 
     def step(self, action):
         self.throughtput = 0
@@ -595,6 +591,7 @@ class CarlaEnv(gym.Env):
 
         # Calculate the actual transmitted data in this time step
         data_transmitted = data_generated - data_loss_total
+        self.transmitted_data_all.append(data_transmitted)
 
         # Calculate the throughput in this time step
         throughput_this_step = data_transmitted / 0.1
@@ -611,8 +608,8 @@ class CarlaEnv(gym.Env):
                     bandwidth * 0.1)  # or replace 0.1 with your actual time step length
 
         # Convert transmit powers from dBm to mW
-        v2i_power_mW = 10 ** (self.data_rate.v2i_power / 10)
-        v2v_power_mW = 10 ** (self.data_rate.v2v_power / 10)
+        v2i_power_mW = 10 ** (self.cal_data_rate.v2i_power / 10)
+        v2v_power_mW = 10 ** (self.cal_data_rate.v2v_power / 10)
 
         # Calculate energy consumed in this time step (in Joules) for each agent
         energy_consumed_this_step = np.zeros(self.n_vehicles)
@@ -671,7 +668,7 @@ class CarlaEnv(gym.Env):
             info['reward'] = self.reward_[-1]
             with open(self.csv_file, 'a') as f:
                 writer = csv.writer(f)
-                writer.writerow([self.reward_[-1], self.lost_data_all[-1]])
+                writer.writerow([self.PER_history[-1], self.throughput_history[-1], self.spectral_efficiency_history[-1],self.energy_efficiency_history[-1],self.fairness_index_history[-1]])
             df = pd.DataFrame({
                 'time_step': range(len(self.PER_history)),
                 'PER': self.PER_history,
@@ -680,9 +677,12 @@ class CarlaEnv(gym.Env):
                 'energy_efficiency': self.energy_efficiency_history,
                 'fairness_index': self.fairness_index_history,
             })
+            df.to_csv(f"running_data_{self.env_id}.csv", index=False)
+
+            print(df)
 
             # Write the DataFrame to a CSV file
-            df.to_csv('metrics.csv', index=False)
+            # df.to_csv('metrics.csv', index=False)
 
 
             # 使用wandb.log记录数据
