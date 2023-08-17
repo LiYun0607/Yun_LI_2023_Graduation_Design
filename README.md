@@ -38,7 +38,7 @@ Transformer-SPMA-PPO demonstrates:
 
 ## System Models and Experimental Results
 
-(System model diagrams and experimental results can be found in the `images/` folder.)
+Please refers to the related papers
 
 ## Usage
 
