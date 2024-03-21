@@ -98,8 +98,8 @@ tar_loc = np.array([[255, -155, 90],
 # units of parameters: bandwidth: MHz; path loss per meter: dB; power: dBm
 class DataRate():
     def __init__(self):
-        self.bandwidth_v2i = 1e7  # MHz
-        self.bandwidth_cr = 1e7
+        self.bandwidth_v2i = 4e7  # MHz
+        self.bandwidth_cr = 4e7
         L0 = 47.86  # dB
         self.L0 = 10**(L0/10)
         self.alpha = 2.75
@@ -187,8 +187,8 @@ class DataRate():
 class GenerateData:
     def __init__(self):
         self.n_data_type = 3
-        self.data_len_max = 30
-        self.data_len_min = 10
+        self.data_len_max = 120
+        self.data_len_min = 40
         self.data_cons_min = 1
         self.data_cons_max = 5
 
