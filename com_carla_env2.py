@@ -231,7 +231,7 @@ class CarlaEnv(gym.Env):
         self.client.set_timeout(300.0)
         self.world = self.client.load_world(TOWN)
         settings = self.world.get_settings()
-        settings.no_rendering_mode = True
+        # settings.no_rendering_mode = True
         if not settings.synchronous_mode:
             synchronous_master = True
             settings.synchronous_mode = True
@@ -586,7 +586,7 @@ class CarlaEnv(gym.Env):
 
             # 使用wandb.log记录数据
             wandb.log(data)
-            log_dir_ = os.path.join(log_dir, 'lost_data_cpo.csv')
+            log_dir_ = os.path.join(log_dir, 'DQN2.csv')
             log_data.to_csv(log_dir_)
 
             print("write file data successfully!")
