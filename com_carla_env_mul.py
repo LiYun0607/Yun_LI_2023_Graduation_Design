@@ -65,7 +65,7 @@ argparser.add_argument(
 argparser.add_argument(
     '-s', '--number-of-episodes',
     metavar='S',
-    default=1024,
+    default=516,
     type=int,
     help='Number of steps per epoch')
 
@@ -227,12 +227,14 @@ class CacheQueue:
 
 
 class CarlaEnv(gym.Env):
-    def __init__(self, env_id, host="localhost", port=2000):
+    def __init__(self, env_id, tm_port, host="localhost", port=2000):
         super(CarlaEnv, self).__init__()
         self.client = carla.Client(host, port)
         self.client.set_timeout(300.0)
         self.world = self.client.load_world(TOWN)
         self.csv_file = f"data_{env_id}.csv"
+        self.traj_file = f"traj_{env_id}.csv"
+        self.tm_port = tm_port
         settings = self.world.get_settings()
         settings.no_rendering_mode = True
         if not settings.synchronous_mode:
@@ -315,6 +317,7 @@ class CarlaEnv(gym.Env):
         self.x_max = []
         self.y_min = []
         self.y_max = []
+        self.trajectory_data = []
 
         def get_collision_hist(event):
             impulse = event.normal_impulse
@@ -331,9 +334,20 @@ class CarlaEnv(gym.Env):
                     self.collision_sensors.append(collision_sensor)
                     self.collision_sensors[-1].listen(lambda event: get_collision_hist(event))
 
+    def save_step_to_trajectory(self, state, action, reward):
+        self.trajectory_data.append({
+            'state': state,
+            'action': action,
+            'reward': reward,
+        })
+
+    def save_trajectory_csv(self, filename):
+        df = pd.DataFrame(self.trajectory_data)
+        df.to_csv(filename, index=False)
+
     def spawn_random_traffic(self):
         self.batch = []
-        traffic_manager = self.client.get_trafficmanager(8000)
+        traffic_manager = self.client.get_trafficmanager(self.tm_port)
         traffic_manager.set_synchronous_mode(True)
         traffic_manager.set_global_distance_to_leading_vehicle(3)
         traffic_manager.global_percentage_speed_difference(30.0)
@@ -572,6 +586,8 @@ class CarlaEnv(gym.Env):
             state.append(self.location_all[i][1])
             for j in range(self.data_generator.data_cons_max):
                 state.append(self.cache_queue[i][j])
+        # self.save_step_to_trajectory(state, action, reward)
+
         if self.time_step >= args.number_of_episodes:
             self.n_itr += 1
             self.n_itr_.append(self.n_itr)
@@ -579,26 +595,16 @@ class CarlaEnv(gym.Env):
             lost_data_all = np.mean(self.untransmiteed_data)
             self.lost_data_all.append(lost_data_all)
             self.reward_.append(np.mean(self.reward))
-            log_data = pd.DataFrame({
-                "lost data all": self.lost_data_all,
-                "number of iteration": self.n_itr_,
-                "reward": self.reward_,
-            })
             data = {
                 "lost_data_all": self.lost_data_all[-1],
                 "reward": self.reward_[-1],
             }
             info['data_loss'] = self.lost_data_all[-1]
             info['reward'] = self.reward_[-1]
+            # self.save_trajectory_csv(self.traj_file)
             with open(self.csv_file, 'a') as f:
                 writer = csv.writer(f)
                 writer.writerow([self.reward_[-1], self.lost_data_all[-1]])
-
-
-            # 使用wandb.log记录数据
-            # wandb.log(data)
-            # log_dir_ = os.path.join(log_dir, 'lost_data_cpo.csv')
-            # log_data.to_csv(log_dir_)
 
             # print("write file data successfully!")
             print(data)
