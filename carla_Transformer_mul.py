@@ -21,18 +21,10 @@ class CustomCallback(BaseCallback):
     def _on_step(self) -> bool:
         # Check if an episode has ended
         done = self.locals.get("done")
-        if done is not None and done:
-            # Get the info dictionaries for each environment
-            infos = self.locals.get("infos")
 
-            # Get the 'reward' and 'data_loss' values from the info dictionary of each environment
-            rewards = [info.get('reward') for info in infos]
-            lost_data = [info.get('data_loss') for info in infos]
 
             # Calculate and record the average reward and data loss
-            self.rewards.append(np.mean(rewards))
-            self.lost_data.append(np.mean(lost_data))
-            print(f"rewards: {self.rewards[-1]}, lost_data: {self.lost_data[-1]}")
+
         return True
 
 
@@ -41,26 +33,27 @@ class CustomTransformer(BaseFeaturesExtractor):
         super(CustomTransformer, self).__init__(observation_space, features_dim)
 
         # Define the transformer encoder
-        encoder_layers = nn.TransformerEncoderLayer(d_model=7, nhead=7)  # Set d_model equal to the feature size
+        encoder_layers = nn.TransformerEncoderLayer(d_model=3, nhead=3)  # Set d_model equal to the feature size
         self.transformer_encoder = nn.TransformerEncoder(encoder_layers, num_layers=2)
 
         # Define the output layer
         self.linear = nn.Linear(7 * 30, features_dim)  # Change the input size of the linear layer
 
     def forward(self, observations):
-        observations = observations.view(observations.shape[0], 30, -1)  # Reshape to (batch_size, n_vehicles, 2 + queue_length)
+        observations = observations.view(observations.shape[0], 70, -1)  # Reshape to (batch_size, n_vehicles, 2 + queue_length)
         transformer_output = self.transformer_encoder(observations)
         return self.linear(transformer_output.view(transformer_output.shape[0], -1))
 
-def make_env(port, env_id):
+def make_env(port, env_id, tm_port):
     def _init():
-        return CarlaEnv(port=port, env_id=env_id)
+        return CarlaEnv(port=port, env_id=env_id, tm_port=tm_port)
     return _init
 
 
 if __name__ == '__main__':
-    ports = [2000, 2004]
-    envs = SubprocVecEnv([make_env(port, i) for i, port in enumerate(ports)])
+    ports = [2000, 2004, 2006]
+    tm_ports = [8000, 8004, 8006]
+    envs = SubprocVecEnv([make_env(port, i, tm_port) for i, (port, tm_port) in enumerate(zip(ports, tm_ports))])
     total_rewards = np.zeros(2)  # 用于保存每个环境的总奖励
     total_lost_data = np.zeros(2)  # 用于保存每个环境的总丢失数据
     # Define policy with custom feature extractor
@@ -74,24 +67,26 @@ if __name__ == '__main__':
     # model = PPO("MlpPolicy", envs, verbose=1, policy_kwargs=policy_kwargs, n_steps=1024, learning_rate=learning_rate_schedule)
     # model.learn(total_timesteps=3072000)
     callback = CustomCallback()
-    model = PPO("MlpPolicy", envs, verbose=1, policy_kwargs=policy_kwargs, n_steps=1024,
+    model = PPO("MlpPolicy", envs, verbose=1, n_steps=2048, policy_kwargs=policy_kwargs,
                 learning_rate=learning_rate_schedule, tensorboard_log="./ppo_transformer/")
-    model.learn(total_timesteps=3072000, callback=callback)
+    model.learn(total_timesteps=20480, callback=callback)
+    # Save the model
+    model.save("Transformer_PPO")
 
     # Now you can access the recorded rewards and lost data
     print(callback.rewards)
     print(callback.lost_data)
 
-# # Create environment
-# env = CarlaEnv()
-#
-# # Define policy with custom feature extractor
-# policy_kwargs = dict(
-#     features_extractor_class=CustomTransformer,
-#     features_extractor_kwargs=dict(features_dim=64),
-# )
-# reward_ = env.reward_
-# lost_data_all = env.lost_data_all
-# # Train agent
-# model = PPO("MlpPolicy", env, verbose=1, policy_kwargs=policy_kwargs)
-# model.learn(total_timesteps=3072000)
+
+
+
+
+
+
+
+
+
+
+
+
+
