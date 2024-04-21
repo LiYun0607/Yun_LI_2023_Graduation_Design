@@ -49,4 +49,4 @@ Follow the instructions in the respective Python files to execute the experiment
 
 ## Contact
 
-For any questions or suggestions, please contact [liyun0607@outlook.com](mailto:liyun0607@outlook.com).
+For any questions or suggestions, please contact [li-yun@g.ecc.u-tokyo.ac.jp](mailto:liyun0607@outlook.com).
